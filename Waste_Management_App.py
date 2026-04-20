@@ -20,13 +20,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# database connection
-connection = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Sahil@13",
-    database="food_waste_management"
-)
+
 
 # load data
 providers = pd.read_csv("clean_providers.csv")
@@ -86,7 +80,6 @@ if menu == "Dashboard":
         st.bar_chart(provider_city_chart)
 
 
-# ---------------- PROVIDERS ----------------
 elif menu == "Providers":
 
     st.subheader("🏢 Providers Data")
@@ -112,7 +105,7 @@ elif menu == "Providers":
     )
 
 
-# ---------------- RECEIVERS ----------------
+
 elif menu == "Receivers":
 
     st.subheader("🙋 Receivers Data")
@@ -138,7 +131,7 @@ elif menu == "Receivers":
     )
 
 
-# ---------------- FOOD ----------------
+
 elif menu == "Food Listings":
 
     st.subheader("🍛 Food Listings")
@@ -164,7 +157,6 @@ elif menu == "Food Listings":
     )
 
 
-# ---------------- CLAIMS ----------------
 elif menu == "Claims":
 
     st.subheader("📦 Claims Data")
@@ -186,151 +178,97 @@ elif menu == "Claims":
         "claims.csv"
     )
     # ---------------- SQL INSIGHTS ----------------
+# ---------------- SQL INSIGHTS ----------------
 elif menu == "SQL Insights":
 
-    st.subheader("📊 SQL Query Results")
+    st.subheader("📊 SQL Query Results (Using CSV Data)")
 
     # 1 providers per city
-    q1 = pd.read_sql("""
-    SELECT City, COUNT(*) as total_providers
-    FROM providers
-    GROUP BY City
-    ORDER BY total_providers DESC
-    """, connection)
+    q1 = providers.groupby("City").size().reset_index(name="total_providers")
 
     st.write("1. Providers count in each city")
     st.dataframe(q1)
 
     # 2 receivers per city
-    q2 = pd.read_sql("""
-    SELECT City, COUNT(*) as total_receivers
-    FROM receivers
-    GROUP BY City
-    ORDER BY total_receivers DESC
-    """, connection)
+    q2 = receivers.groupby("City").size().reset_index(name="total_receivers")
 
     st.write("2. Receivers count in each city")
     st.dataframe(q2)
 
-    # 3 provider type
-    q3 = pd.read_sql("""
-    SELECT Type, COUNT(*) as provider_count
-    FROM providers
-    GROUP BY Type
-    """, connection)
+    # 3 provider type contribution
+    q3 = food.groupby("Provider_Type")["Quantity"].sum().reset_index()
 
-    st.write("3. Provider types contribution")
-    st.dataframe(q3)
+    st.write("3. Provider type contributing most food")
+    st.dataframe(q3.sort_values(by="Quantity", ascending=False))
 
-    # 4 total food quantity
-    q4 = pd.read_sql("""
-    SELECT SUM(Quantity) as total_food
-    FROM food_listings
-    """, connection)
+    # 4 total food available
+    total_food = food["Quantity"].sum()
 
-    st.write("4. Total food quantity available")
-    st.dataframe(q4)
+    st.write("4. Total quantity of food available")
+    st.write(total_food)
 
-    # 5 city with most food
-    q5 = pd.read_sql("""
-    SELECT Location, COUNT(*) as listings
-    FROM food_listings
-    GROUP BY Location
-    ORDER BY listings DESC
-    """, connection)
+    # 5 city with highest food listings
+    q5 = food["Location"].value_counts().reset_index()
+    q5.columns = ["City", "Listings"]
 
-    st.write("5. City with highest food listings")
-    st.dataframe(q5)
+    st.write("5. City with highest number of food listings")
+    st.dataframe(q5.head(1))
 
-    # 6 food type distribution
-    q6 = pd.read_sql("""
-    SELECT Food_Type, COUNT(*) as total
-    FROM food_listings
-    GROUP BY Food_Type
-    """, connection)
+    # 6 most common food types
+    q6 = food["Food_Type"].value_counts().reset_index()
+    q6.columns = ["Food Type", "Count"]
 
-    st.write("6. Most common food types")
+    st.write("6. Most commonly available food types")
     st.dataframe(q6)
 
     # 7 claims per food item
-    q7 = pd.read_sql("""
-    SELECT Food_ID, COUNT(*) as claims
-    FROM claims
-    GROUP BY Food_ID
-    """, connection)
+    q7 = claims["Food_ID"].value_counts().reset_index()
+    q7.columns = ["Food_ID", "Total Claims"]
 
-    st.write("7. Claims per food item")
+    st.write("7. Claims made for each food item")
     st.dataframe(q7)
 
-    # 8 successful claims per provider
-    q8 = pd.read_sql("""
-    SELECT f.Provider_ID, COUNT(*) as success_claims
-    FROM claims c
-    JOIN food_listings f ON c.Food_ID = f.Food_ID
-    WHERE Status='Completed'
-    GROUP BY f.Provider_ID
-    """, connection)
+    # 8 provider with highest successful claims
+    merged = claims.merge(food, on="Food_ID")
 
-    st.write("8. Successful claims by provider")
-    st.dataframe(q8)
+    q8 = merged[merged["Status"]=="Completed"] \
+        .groupby("Provider_ID") \
+        .size() \
+        .reset_index(name="Successful Claims")
+
+    st.write("8. Provider with highest successful claims")
+    st.dataframe(q8.sort_values(by="Successful Claims", ascending=False))
 
     # 9 claim status percentage
-    st.subheader("📦 Claim Status (%)")
+    st.subheader("9. Claim Status Percentage")
 
-    claim_percent = (
-    claims["Status"]
-    .value_counts(normalize=True) * 100
-    )
-
+    claim_percent = claims["Status"].value_counts(normalize=True)*100
     claim_percent = claim_percent.round(2)
 
     st.bar_chart(claim_percent)
-
-    st.write("9.Percentage distribution of claim status")
     st.dataframe(claim_percent)
 
-    
+    # 10 avg quantity per receiver
+    q10 = merged.groupby("Receiver_ID")["Quantity"].mean().reset_index()
 
-    # 10 avg food per receiver
-    q10 = pd.read_sql("""
-    SELECT Receiver_ID, AVG(f.Quantity) as avg_food
-    FROM claims c
-    JOIN food_listings f ON c.Food_ID=f.Food_ID
-    GROUP BY Receiver_ID
-    """, connection)
-
-    st.write("10. Average food claimed per receiver")
+    st.write("10. Average quantity claimed per receiver")
     st.dataframe(q10)
 
-    # 11 meal type most claimed
-    q11 = pd.read_sql("""
-    SELECT f.Meal_Type, COUNT(*) as total
-    FROM claims c
-    JOIN food_listings f ON c.Food_ID=f.Food_ID
-    GROUP BY f.Meal_Type
-    """, connection)
+    # 11 most claimed meal type
+    q11 = merged["Meal_Type"].value_counts().reset_index()
+    q11.columns = ["Meal Type", "Total Claims"]
 
     st.write("11. Most claimed meal type")
     st.dataframe(q11)
 
-    # 12 total food by provider
-    q12 = pd.read_sql("""
-    SELECT Provider_ID, SUM(Quantity) as total_food
-    FROM food_listings
-    GROUP BY Provider_ID
-    """, connection)
+    # 12 total food donated by provider
+    q12 = food.groupby("Provider_ID")["Quantity"].sum().reset_index()
 
     st.write("12. Total food donated by each provider")
-    st.dataframe(q12)
+    st.dataframe(q12.sort_values(by="Quantity", ascending=False))
 
-    q13 = pd.read_sql("""
-    SELECT Location,
-    COUNT(*) AS total_food_listings
-    FROM food_listings
-    GROUP BY Location
-    ORDER BY total_food_listings DESC
-    LIMIT 1
-    """, connection)
+    # 13 receiver claiming most food
+    q13 = merged.groupby("Receiver_ID")["Quantity"].sum().reset_index()
 
-    st.write("13. City with highest number of food listings")
-    st.dataframe(q13)
+    st.write("13. Receivers who claimed the most food")
+    st.dataframe(q13.sort_values(by="Quantity", ascending=False))
